@@ -4,10 +4,10 @@ import { lunaRange, formatLocal, magneticDeclinationDeg, localMidnight, addDaysY
 import { moonSvg } from './moon.js';
 
 const DEFAULT_PLACE = {
-  name: 'Club Jardín Náutico Escobar',
-  detail: 'Escobar, Buenos Aires, Argentina',
-  lat: -34.24396,
-  lon: -58.74661,
+  name: 'Obelisco',
+  detail: 'San Nicolás, CABA, Argentina',
+  lat: -34.60371,
+  lon: -58.38163,
   tz: 'America/Argentina/Buenos_Aires',
 };
 const STORAGE_KEYS = { state: 'lunapp.state', favorites: 'lunapp.favorites' };
@@ -42,19 +42,19 @@ const deviceTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const saved = readStorage(STORAGE_KEYS.state, {});
 const state = {
   place: saved.place ?? DEFAULT_PLACE,
-  mapOpen: saved.mapOpen ?? true,
   baseLayer: saved.baseLayer ?? null,
 };
 let favorites = readStorage(STORAGE_KEYS.favorites, []);
 let nextRise = null;
+let nextRiseDay = null;
 
 function todayIn(tz) {
   return formatLocal(new Date(), tz).slice(0, 10);
 }
 
 function persist() {
-  const { place, mapOpen, baseLayer } = state;
-  writeStorage(STORAGE_KEYS.state, { place, mapOpen, baseLayer });
+  const { place, baseLayer } = state;
+  writeStorage(STORAGE_KEYS.state, { place, baseLayer });
 }
 
 const fmtDeg = (v) => `${Math.round(v)}°`;
@@ -67,7 +67,6 @@ function ymdToNoonUtc(ymd) {
 
 const formatters = {
   weekday: new Intl.DateTimeFormat('es-AR', { timeZone: 'UTC', weekday: 'short' }),
-  dayMonth: new Intl.DateTimeFormat('es-AR', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }),
   month: new Intl.DateTimeFormat('es-AR', { timeZone: 'UTC', month: 'long', year: 'numeric' }),
 };
 
@@ -75,13 +74,6 @@ function timeLabel(event, cardYmd, tz) {
   const local = formatLocal(event.date ?? event, tz);
   const dayShift = Math.round((Date.parse(local.slice(0, 10)) - Date.parse(cardYmd)) / 86400000);
   return local.slice(11) + (dayShift ? ` (${dayShift > 0 ? '+' : ''}${dayShift}d)` : '');
-}
-
-function relativeDayLabel(ymd, todayYmd) {
-  const diff = Math.round((Date.parse(ymd) - Date.parse(todayYmd)) / 86400000);
-  if (diff === 0) return 'hoy';
-  if (diff === 1) return 'mañana';
-  return formatters.dayMonth.format(ymdToNoonUtc(ymd));
 }
 
 function seededRandom(seed) {
@@ -111,10 +103,19 @@ function renderPlace() {
   $('place-name').textContent = place.name;
   $('place-detail').textContent = place.detail || `${fmtNum(place.lat, 4)}, ${fmtNum(place.lon, 4)}`;
   const declination = magneticDeclinationDeg(place.lat, place.lon, new Date());
+  renderFavorites();
   $('declination-note').textContent = `Acá el norte magnético está ${fmtNum(Math.abs(declination), 1)}° al ${declination < 0 ? 'oeste' : 'este'} del verdadero.`;
 }
 
+function isSamePlace(a, b) {
+  return a.lat === b.lat && a.lon === b.lon;
+}
+
 function renderFavorites() {
+  const saved = favorites.some((f) => isSamePlace(f, state.place));
+  $('save-favorite').classList.toggle('saved', saved);
+  $('save-favorite').setAttribute('aria-pressed', String(saved));
+  $('save-favorite').title = saved ? 'Quitar de favoritos' : 'Guardar en favoritos';
   $('favorites-block').hidden = favorites.length === 0;
   $('favorites').innerHTML = favorites.map((f, i) => `
     <li><button type="button" data-use="${i}">${escapeHtml(f.name)}<span class="sub">${escapeHtml(f.detail ?? '')}</span></button>
@@ -134,7 +135,6 @@ function moonIcon(fraction, elongationDeg, size) {
 function renderHero(upcoming) {
   const { place } = state;
   const now = new Date();
-  const today = todayIn(place.tz);
   const fraction = Astronomy.Illumination(Astronomy.Body.Moon, now).phase_fraction;
   const elongation = Astronomy.MoonPhase(now);
   const previousNew = Astronomy.SearchMoonPhase(0, now, -SYNODIC_MONTH_DAYS - 1);
@@ -146,9 +146,7 @@ function renderHero(upcoming) {
 
   const day = upcoming.find((d) => d.visibleRise && d.visibleRise.date > now);
   nextRise = day?.visibleRise ?? null;
-  $('hero-next').innerHTML = day
-    ? `Próxima salida: <b>${relativeDayLabel(day.date, today)} ${timeLabel(nextRise, day.date, place.tz)}</b><br>hacia el ${nextRise.cardinal} · ${fmtDeg(nextRise.azimuthTrue)} V / ${fmtDeg(nextRise.azimuthMagnetic)} M`
-    : '';
+  nextRiseDay = day?.date ?? null;
 }
 
 function daysUntilEndOfNextMonth(todayYmd) {
@@ -175,38 +173,62 @@ function phaseBackground(fraction) {
 }
 
 function trajectoryTable(day, tz) {
-  const rows = day.trajectory.map((p) => `
-    <tr><td>+${p.minutesAfterRise} min</td><td>${fmtNum(p.altitude, 1)}°</td>
-    <td>${fmtDeg(p.azimuthTrue)}</td><td>${fmtDeg(p.azimuthMagnetic)}</td><td>${timeLabel(p, day.date, tz)}</td></tr>`).join('');
+  const maxAltitude = Math.max(...day.trajectory.map((p) => p.altitude), 1);
+  const rows = day.trajectory.map((p) => {
+    const barPct = Math.max(0, p.altitude) / maxAltitude * 100;
+    return `<tr${p.minutesAfterRise === 0 ? ' class="rise-row"' : ''}>
+      <td class="dt">${p.minutesAfterRise === 0 ? 'sale' : `+${p.minutesAfterRise}′`}</td>
+      <td class="alt"><span class="v">${fmtNum(p.altitude, 1)}°</span><span class="track-bar"><span style="width:${barPct.toFixed(0)}%"></span></span></td>
+      <td>${fmtDeg(p.azimuthTrue)}</td><td class="m">${fmtDeg(p.azimuthMagnetic)}</td>
+      <td class="time">${timeLabel(p, day.date, tz)}</td></tr>`;
+  }).join('');
   return `<details class="tip"><summary>¿Hay árboles o edificios? Cómo usar la tabla</summary>
       <p>Los horarios son para un horizonte plano. Medí cuántos grados tapa el obstáculo en la dirección de la salida: con el brazo bien estirado, un puño cerrado ≈ 10°, tres dedos juntos ≈ 5°, el meñique ≈ 1° (±30% según tu brazo y tu mano). Con un inclinómetro en el celular es más preciso. Después buscá abajo la primera fila con una altura mayor: esa es la hora y la dirección en que la vas a ver asomar.</p>
     </details>
-    <table><thead><tr><th></th><th>Altura</th><th>V</th><th>M</th><th>Hora</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <table class="track"><thead><tr><th></th><th class="alt">Altura</th><th>V</th><th class="m">M</th><th>Hora</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function dayBody(day, tz, fullMoonAt, newMoonAt) {
+function skyPhrase(sky) {
+  return sky.startsWith('crepúsculo') ? `Sale en el ${sky}` : `Sale de ${sky}`;
+}
+
+function tile(label, value, sub = '') {
+  return `<div class="tile"><div class="tile-label">${label}</div><div class="tile-value">${value}</div>${sub ? `<div class="tile-sub">${sub}</div>` : ''}</div>`;
+}
+
+function dayBody(day, tz, fullMoonAt, newMoonAt, { withTrack = true } = {}) {
   const vr = day.visibleRise;
-  const transit = day.transit
-    ? `${timeLabel(day.transit, day.date, tz)} · ${fmtNum(day.transit.altitude, 0)}° de altura${day.transit.altitude < 0 ? ' (bajo el horizonte)' : ''}`
-    : '—';
-  const facts = [
-    fullMoonAt && ['Luna llena', `${timeLabel(fullMoonAt, day.date, tz)} (el instante exacto)`],
-    newMoonAt && ['Luna nueva', `${timeLabel(newMoonAt, day.date, tz)} (el instante exacto)`],
-    vr && ['Salida', `${timeLabel(vr, day.date, tz)} · ${vr.cardinal} · ${fmtDeg(vr.azimuthTrue)} V / ${fmtDeg(vr.azimuthMagnetic)} M`],
-    !vr && ['Salida', 'no sale este día (sale antes de la medianoche anterior y después de la siguiente)'],
-    vr && ['Cielo al salir', `${day.sun.skyAtVisibleRise} · atardecer ${day.sun.set ? timeLabel(day.sun.set, day.date, tz) : '—'}`],
-    ['Fase', `${day.phase.name} · ${fmtNum(day.phase.fraction * 100)}% iluminada`],
-    ['Más alta', transit],
-    ['Puesta', day.set ? `${timeLabel(day.set, day.date, tz)} · ${day.set.cardinal} · ${fmtDeg(day.set.azimuthTrue)} V` : 'no se pone este día'],
-    vr && ['Distancia', `${fmtNum(vr.topocentricKm)} km`],
-  ].filter(Boolean);
+  const sunset = day.sun.set ? timeLabel(day.sun.set, day.date, tz) : '—';
+  const riseTile = vr
+    ? `<div class="tile tile-rise">
+        <div class="tile-label">Salida</div>
+        <div class="rise-main"><span class="rise-time num">${timeLabel(vr, day.date, tz)}</span>
+          <span class="rise-dir">${vr.cardinal}<span class="num"> ${fmtDeg(vr.azimuthTrue)} V · ${fmtDeg(vr.azimuthMagnetic)} M</span></span></div>
+        <div class="tile-sub">${skyPhrase(day.sun.skyAtVisibleRise)} · atardecer ${sunset}</div>
+      </div>`
+    : `<div class="tile tile-rise"><div class="tile-label">Salida</div><div class="tile-value muted">No sale este día</div>
+        <div class="tile-sub">Sale poco antes de la medianoche anterior y vuelve a salir pasada la siguiente.</div></div>`;
+  const phaseEvent = fullMoonAt ? ['Luna llena', fullMoonAt] : newMoonAt ? ['Luna nueva', newMoonAt] : null;
+  const tiles = [
+    day.set
+      ? tile('Puesta', `<span class="num">${timeLabel(day.set, day.date, tz)}</span>`, `${day.set.cardinal} · ${fmtDeg(day.set.azimuthTrue)} V`)
+      : tile('Puesta', '<span class="muted">No se pone</span>'),
+    day.transit
+      ? tile('Más alta', `<span class="num">${timeLabel(day.transit, day.date, tz)}</span>`, `${fmtNum(day.transit.altitude, 0)}° de altura${day.transit.altitude < 0 ? ' (bajo el horizonte)' : ''}`)
+      : tile('Más alta', '—'),
+    tile('Fase', `<span class="num">${fmtNum(day.phase.fraction * 100)}%</span>`, day.phase.name),
+    phaseEvent
+      ? tile(phaseEvent[0], `<span class="num">${timeLabel(phaseEvent[1], day.date, tz)}</span>`, 'instante exacto')
+      : vr ? tile('Distancia', `<span class="num">${fmtNum(vr.topocentricKm / 1000, 1)}</span> mil km`) : '',
+  ].join('');
   return `<div class="day-body">
-    <dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
-    ${vr ? trajectoryTable(day, tz) : ''}
+    ${riseTile}
+    <div class="tiles">${tiles}</div>
+    ${vr && withTrack ? trajectoryTable(day, tz) : ''}
   </div>`;
 }
 
-function dayRow(day, tz, today, fullMoons, newMoons) {
+function dayRow(day, tz, today, fullMoons, newMoons, { idPrefix = 'd', open = false, withTrack = true } = {}) {
   const vr = day.visibleRise;
   const date = ymdToNoonUtc(day.date);
   const fullMoonAt = fullMoons.get(day.date);
@@ -218,13 +240,14 @@ function dayRow(day, tz, today, fullMoons, newMoons) {
   const set = day.set
     ? `<div class="ev"><div class="t num"><span class="arrow">↓</span>${timeLabel(day.set, day.date, tz)}</div><div class="a">${day.set.cardinal}</div></div>`
     : '<div class="ev none"><div class="t"><span class="arrow">↓</span>—</div><div class="a">no se pone</div></div>';
-  return `<details class="${classes}" id="d-${day.date}" style="background:${phaseBackground(day.phase.fraction)}">
+  return `<details class="${classes}" id="${idPrefix}-${day.date}" style="background:${phaseBackground(day.phase.fraction)}"${open ? ' open' : ''}>
     <summary>
       <div class="date"><b class="num">${date.getUTCDate()}</b><span>${formatters.weekday.format(date)}</span>${fullMoonAt ? '<span class="phase-tag">llena</span>' : ''}${newMoonAt ? '<span class="phase-tag new">nueva</span>' : ''}</div>
       <div class="phase-icon">${moonIcon(day.phase.fraction, day.phase.elongationDeg, 34)}</div>
       ${rise}${set}
+      <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
     </summary>
-    ${dayBody(day, tz, fullMoonAt, newMoonAt)}
+    ${dayBody(day, tz, fullMoonAt, newMoonAt, { withTrack })}
   </details>`;
 }
 
@@ -239,6 +262,14 @@ function renderDays(results) {
     if (!byMonth.has(key)) byMonth.set(key, []);
     byMonth.get(key).push(day);
   }
+  const nextDay = results.find((d) => d.date === nextRiseDay);
+  $('next-day').innerHTML = nextDay
+    ? `<div class="month">Próxima salida</div>
+       <div class="days">${dayRow(nextDay, place.tz, today, fullMoons, newMoons, { idPrefix: 'next', open: true, withTrack: false })}</div>`
+    : '';
+  $('next-track').innerHTML = nextDay?.visibleRise
+    ? `<div class="month">Recorrido tras la salida</div>${trajectoryTable(nextDay, place.tz)}`
+    : '';
   $('day-list').innerHTML = [...byMonth.values()].map((monthDays) => `
     <div class="month">${formatters.month.format(ymdToNoonUtc(monthDays[0].date))}</div>
     <div class="days">${monthDays.map((d) => dayRow(d, place.tz, today, fullMoons, newMoons)).join('')}</div>`).join('');
@@ -253,21 +284,17 @@ function render() {
   updateMap();
 }
 
-function setPlace(place, { closePanel = true } = {}) {
+function setPlace(place) {
   state.place = place;
-  if (closePanel) togglePanel(null);
   persist();
   renderPlace();
   render();
 }
 
-function togglePanel(buttonId) {
-  const panels = { 'toggle-place': 'location-panel', 'toggle-help': 'help-panel' };
-  for (const [button, panel] of Object.entries(panels)) {
-    const open = button === buttonId && $(panel).hidden;
-    $(panel).hidden = !open;
-    $(button).setAttribute('aria-expanded', String(open));
-  }
+function toggleHelp() {
+  const open = $('help-panel').hidden;
+  $('help-panel').hidden = !open;
+  $('toggle-help').setAttribute('aria-expanded', String(open));
 }
 
 async function timeZoneFor(lat, lon) {
@@ -390,7 +417,7 @@ async function moveTo(latlng) {
     ...state.place,
     detail: `Punto ajustado · ${fmtNum(lat, 5)}, ${fmtNum(lng, 5)}`,
     lat, lon: lng, tz,
-  }, { closePanel: false });
+  });
 }
 
 function initMap() {
@@ -414,18 +441,6 @@ function initMap() {
   marker.on('dragend', () => moveTo(marker.getLatLng()));
   map.on('click', (event) => moveTo(event.latlng));
   map.on('zoomend resize', drawArrow);
-}
-
-function setMapOpen(open) {
-  state.mapOpen = open;
-  persist();
-  $('map-block').hidden = !open;
-  $('toggle-map').setAttribute('aria-expanded', String(open));
-  $('toggle-map-label').textContent = open ? 'Ocultar mapa' : 'Mostrar mapa';
-  if (!open) return;
-  if (!map) initMap();
-  else map.invalidateSize();
-  updateMap({ recenter: true });
 }
 
 // Search
@@ -492,14 +507,12 @@ $('search-results').addEventListener('click', async (event) => {
   const tz = (await timeZoneFor(result.lat, result.lon)) ?? deviceTimeZone;
   $('search-results').innerHTML = '';
   $('search-input').value = '';
-  setPlace({ ...result, tz }, { closePanel: false });
-  if (state.mapOpen) updateMap({ recenter: true });
+  setPlace({ ...result, tz });
+  updateMap({ recenter: true });
 });
 
-$('toggle-map').addEventListener('click', () => setMapOpen(!state.mapOpen));
 
-$('toggle-place').addEventListener('click', () => togglePanel('toggle-place'));
-$('toggle-help').addEventListener('click', () => togglePanel('toggle-help'));
+$('toggle-help').addEventListener('click', toggleHelp);
 
 $('gps-button').addEventListener('click', () => {
   if (!navigator.geolocation) {
@@ -511,8 +524,8 @@ $('gps-button').addEventListener('click', () => {
     async ({ coords }) => {
       $('gps-button').disabled = false;
       const tz = (await timeZoneFor(coords.latitude, coords.longitude)) ?? deviceTimeZone;
-      setPlace({ name: 'Mi ubicación', detail: `GPS ±${Math.round(coords.accuracy)} m`, lat: coords.latitude, lon: coords.longitude, tz }, { closePanel: false });
-      if (state.mapOpen) updateMap({ recenter: true });
+      setPlace({ name: 'Mi ubicación', detail: `GPS ±${Math.round(coords.accuracy)} m`, lat: coords.latitude, lon: coords.longitude, tz });
+      updateMap({ recenter: true });
     },
     (error) => {
       $('gps-button').disabled = false;
@@ -524,12 +537,10 @@ $('gps-button').addEventListener('click', () => {
 
 $('save-favorite').addEventListener('click', () => {
   const { place } = state;
-  favorites = [...favorites.filter((f) => f.lat !== place.lat || f.lon !== place.lon), place];
+  const others = favorites.filter((f) => !isSamePlace(f, place));
+  favorites = others.length === favorites.length ? [...favorites, place] : others;
   writeStorage(STORAGE_KEYS.favorites, favorites);
   renderFavorites();
-  const label = $('save-favorite').querySelector('span');
-  label.textContent = 'Guardado';
-  setTimeout(() => { label.textContent = 'Guardar lugar'; }, 1500);
 });
 
 $('favorites').addEventListener('click', (event) => {
@@ -547,4 +558,5 @@ renderStars();
 renderPlace();
 renderFavorites();
 render();
-setMapOpen(state.mapOpen);
+initMap();
+updateMap();
