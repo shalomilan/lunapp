@@ -162,7 +162,10 @@ details.tip > p { margin: 6px 0 0; padding: 10px 12px; font-size: .85rem; backgr
 .phase-tag.new { color: var(--muted); }
 .day-body { padding: 4px 12px 14px; }
 .chevron { color: var(--muted); transition: transform .2s ease; }
-.day[open] .chevron { transform: rotate(180deg); color: var(--accent); }
+.day[open] .chevron, .track-section[open] > summary .chevron { transform: rotate(180deg); color: var(--accent); }
+.track-section > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.track-section > summary::-webkit-details-marker { display: none; }
+.track-section > summary .chevron { margin-right: 12px; }
 .day > summary:hover .chevron { color: var(--text); }
 .tile { background: #0b10204d; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; min-width: 0; }
 .tile-label { font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }

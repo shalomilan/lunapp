@@ -228,6 +228,8 @@ function dayBody(day, tz, fullMoonAt, newMoonAt, { withTrack = true } = {}) {
   </div>`;
 }
 
+const CHEVRON = '<svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
 function dayRow(day, tz, today, fullMoons, newMoons, { idPrefix = 'd', open = false, withTrack = true } = {}) {
   const vr = day.visibleRise;
   const date = ymdToNoonUtc(day.date);
@@ -245,7 +247,7 @@ function dayRow(day, tz, today, fullMoons, newMoons, { idPrefix = 'd', open = fa
       <div class="date"><b class="num">${date.getUTCDate()}</b><span>${formatters.weekday.format(date)}</span>${fullMoonAt ? '<span class="phase-tag">llena</span>' : ''}${newMoonAt ? '<span class="phase-tag new">nueva</span>' : ''}</div>
       <div class="phase-icon">${moonIcon(day.phase.fraction, day.phase.elongationDeg, 34)}</div>
       ${rise}${set}
-      <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      ${CHEVRON}
     </summary>
     ${dayBody(day, tz, fullMoonAt, newMoonAt, { withTrack })}
   </details>`;
@@ -257,7 +259,7 @@ function renderDays(results) {
   const fullMoons = phaseEventsByLocalDate(180, today, results.length, place.tz);
   const newMoons = phaseEventsByLocalDate(0, today, results.length, place.tz);
   const byMonth = new Map();
-  for (const day of results) {
+  for (const day of results.filter((d) => d.date !== nextRiseDay)) {
     const key = day.date.slice(0, 7);
     if (!byMonth.has(key)) byMonth.set(key, []);
     byMonth.get(key).push(day);
@@ -268,7 +270,10 @@ function renderDays(results) {
        <div class="days">${dayRow(nextDay, place.tz, today, fullMoons, newMoons, { idPrefix: 'next', open: true, withTrack: false })}</div>`
     : '';
   $('next-track').innerHTML = nextDay?.visibleRise
-    ? `<div class="month">Recorrido tras la salida</div>${trajectoryTable(nextDay, place.tz)}`
+    ? `<details class="track-section" open>
+        <summary class="month">Recorrido tras la salida${CHEVRON}</summary>
+        ${trajectoryTable(nextDay, place.tz)}
+      </details>`
     : '';
   $('day-list').innerHTML = [...byMonth.values()].map((monthDays) => `
     <div class="month">${formatters.month.format(ymdToNoonUtc(monthDays[0].date))}</div>
