@@ -1,0 +1,19 @@
+{
+  "name": "lunapp",
+  "version": "1.0.0",
+  "description": "Salida de la luna: cuándo y por dónde sale desde un lugar",
+  "scripts": {
+    "validate": "node scripts/validate.js",
+    "build": "node scripts/build.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "astronomy-engine": "^2.1.19",
+    "geomagnetism": "^0.2.0",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "private": true
+}

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Salida de la luna</title>
+<style>/* LEAFLET_CSS */</style>
+<style>
+:root {
+  --bg: #0b1020;
+  --surface: #131a2e;
+  --surface-2: #1b2340;
+  --border: #263056;
+  --text: #e8ecf6;
+  --muted: #8f9bbd;
+  --accent: #f2c96d;
+  --danger: #ff7b72;
+  --radius: 14px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+}
+.wrap { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+button, input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+}
+button { cursor: pointer; }
+button.link { background: none; border: none; color: var(--accent); padding: 0; min-height: 0; text-align: left; }
+input { width: 100%; }
+label { display: block; font-size: .8rem; color: var(--muted); }
+label > input { margin-top: 4px; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.row { display: flex; gap: 8px; align-items: end; }
+.row > * { flex: 1; min-width: 0; }
+.error { color: var(--danger); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Header */
+header.hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 40% at 80% 10%, #3a4a9a33, transparent),
+    linear-gradient(180deg, #18214d 0%, #111938 65%, var(--bg) 100%);
+  padding: calc(22px + env(safe-area-inset-top)) 0 24px;
+}
+.stars { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.stars .tw { animation: twinkle 4s ease-in-out infinite alternate; }
+@keyframes twinkle { from { opacity: .25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .stars .tw { animation: none; } }
+.hero .wrap { position: relative; }
+.hero-inner { display: flex; gap: 20px; align-items: center; }
+.hero-moon { flex: none; filter: drop-shadow(0 0 22px #f4ecd440); line-height: 0; }
+.hero-text { min-width: 0; }
+.hero-title { font-size: .75rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.hero-phase { font-size: 1.5rem; font-weight: 700; margin: 2px 0; }
+.hero-next { margin: 8px 0 0; }
+.hero-next b { color: var(--accent); }
+.place-bar {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  margin-top: 20px; padding: 10px 12px;
+  background: #0b10208c; border: 1px solid #ffffff1a; border-radius: var(--radius);
+  backdrop-filter: blur(4px);
+}
+.place-bar > div { min-width: 0; }
+.place-bar strong, .place-bar .muted { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toolbar { display: flex; gap: 8px; flex: none; }
+.toolbar button { min-height: 36px; padding: 6px 12px; font-size: .9rem; background: #ffffff14; border-color: #ffffff22; }
+.toolbar button[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+
+/* Panels */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin: 12px 0;
+}
+.panel > * + * { margin-top: 12px; }
+.panel h2 { font-size: .8rem; color: var(--muted); font-weight: 500; margin: 0; }
+.panel p { margin: 0; }
+details > summary { cursor: pointer; color: var(--accent); font-size: .9rem; }
+details[open] > summary { margin-bottom: 8px; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { display: flex; gap: 8px; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); }
+.list li:first-child { border-top: none; }
+.list li > button:first-child { flex: 1; text-align: left; background: none; border: none; padding: 8px 0; min-height: 0; }
+.list .sub { display: block; font-size: .8rem; color: var(--muted); }
+.search-row { display: flex; gap: 8px; }
+.search-row input { flex: 1; min-width: 0; }
+.icon-btn { flex: none; width: 44px; padding: 0; display: grid; place-items: center; color: var(--text); }
+.actions { display: flex; gap: 8px; }
+button.secondary {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 38px; padding: 6px 12px; font-size: .9rem;
+  background: transparent; border-color: var(--border); color: var(--text);
+}
+button.secondary svg { color: var(--muted); }
+button.secondary[aria-expanded="true"] { border-color: var(--accent); }
+.help h2 { color: var(--text); font-size: .9rem; font-weight: 600; }
+.help h2 + p { margin-top: 4px; }
+.map-section { margin: 14px 0 0; }
+.map-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.map-head .muted { min-width: 0; }
+.map-head button { flex: none; white-space: nowrap; }
+.rise-arrow { filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.leaflet-control-layers { background: #131a2eee; color: var(--text); border: 1px solid var(--border) !important; border-radius: 8px !important; }
+.leaflet-control-layers-expanded { padding: 8px 10px; }
+.leaflet-control-layers-toggle, .leaflet-touch .leaflet-control-layers-toggle {
+  width: 36px; height: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e8ecf6' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='m12 3 9 5-9 5-9-5z'/%3E%3Cpath d='m3 13 9 5 9-5'/%3E%3C/svg%3E");
+  background-size: 22px 22px;
+}
+.leaflet-control-layers label { color: var(--text); font-size: .85rem; }
+details.tip { margin-top: 12px; }
+details.tip > summary { color: var(--muted); font-size: .8rem; }
+details.tip > summary::before { content: "i"; display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 6px; border: 1px solid currentColor; border-radius: 50%; font-size: .7rem; font-style: italic; font-family: Georgia, serif; }
+details.tip > p { margin: 6px 0 0; padding: 10px 12px; font-size: .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.map-label {
+  background: #0b1020e6; color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px 8px; font-size: .8rem;
+}
+#map { height: 320px; border-radius: 10px; border: 1px solid var(--border); }
+.map-pin { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); border: 3px solid #0b1020; box-shadow: 0 0 0 2px var(--accent); }
+.leaflet-container { background: var(--surface-2); font: inherit; }
+
+/* Day list */
+.month { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 20px 4px 6px; }
+.days { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.day { border-top: 1px solid var(--border); }
+.days > .day:first-child { border-top: none; }
+.day.full { box-shadow: inset 3px 0 0 var(--accent); }
+.day > summary {
+  list-style: none; cursor: pointer;
+  display: grid; grid-template-columns: 2.8rem 34px 1fr 1fr; gap: 12px; align-items: center;
+  padding: 10px 12px;
+  color: var(--text); font-size: 1rem;
+}
+.day > summary::-webkit-details-marker { display: none; }
+.day[open] > summary { background: #ffffff08; }
+.day.today .date b { color: var(--accent); }
+.date { line-height: 1.1; }
+.date b { display: block; font-size: 1.15rem; }
+.date span { font-size: .75rem; color: var(--muted); text-transform: capitalize; }
+.phase-icon { line-height: 0; }
+.ev { line-height: 1.15; }
+.ev .t { font-size: 1.05rem; font-weight: 600; }
+.ev .a { font-size: .75rem; color: var(--muted); }
+.ev.none .t { color: var(--muted); font-weight: 400; }
+.arrow { color: var(--muted); font-size: .8rem; margin-right: 3px; }
+.phase-tag { display: block; font-size: .7rem; color: var(--accent); text-transform: none; }
+.phase-tag.new { color: var(--muted); }
+.day-body { padding: 6px 12px 14px; }
+dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; margin: 0; font-size: .9rem; }
+dl.facts dt { color: var(--muted); }
+dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; margin-top: 12px; }
+caption { text-align: left; color: var(--muted); font-size: .8rem; padding-bottom: 4px; }
+th, td { text-align: right; padding: 4px 6px; border-top: 1px solid var(--border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 500; }
+footer { margin-top: 24px; font-size: .8rem; color: var(--muted); }
+footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <svg class="stars" id="stars" aria-hidden="true"></svg>
+  <div class="wrap">
+    <div class="hero-inner">
+      <div class="hero-moon" id="hero-moon"></div>
+      <div class="hero-text">
+        <p class="hero-title">Salida de la luna</p>
+        <p class="hero-phase" id="hero-phase"></p>
+        <p class="muted small" id="hero-detail"></p>
+        <p class="small hero-next" id="hero-next"></p>
+      </div>
+    </div>
+    <div class="place-bar">
+      <div><strong id="place-name"></strong><span class="muted small" id="place-detail"></span></div>
+      <div class="toolbar">
+        <button type="button" id="toggle-place" aria-expanded="false" aria-controls="location-panel">Lugar</button>
+        <button type="button" id="toggle-help" aria-expanded="false" aria-controls="help-panel">Ayuda</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel" id="location-panel" hidden>
+    <div class="search-row">
+      <input id="search-input" type="search" placeholder="Buscar un lugar: Rosedal, Costanera Sur…" autocomplete="off" enterkeyhint="search" aria-label="Buscar un lugar">
+      <button type="button" class="icon-btn" id="gps-button" aria-label="Usar mi ubicación" title="Usar mi ubicación">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+      </button>
+    </div>
+    <ul class="list" id="search-results"></ul>
+    <p class="error small" id="search-error" hidden></p>
+    <div class="actions">
+      <button type="button" class="secondary" id="save-favorite">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+        <span>Guardar lugar</span>
+      </button>
+    </div>
+    <div id="favorites-block">
+      <h2>Favoritos en este dispositivo</h2>
+      <ul class="list" id="favorites"></ul>
+    </div>
+  </section>
+
+  <section class="panel help" id="help-panel" hidden>
+    <h2>Horizonte plano</h2>
+    <p class="small">Los horarios son para un horizonte plano (0°), como en el mar o la pampa. Si hay árboles o edificios, la luna asoma más tarde y en una dirección algo distinta. Al desplegar cada día hay una tabla con el recorrido y una explicación para estimar cuándo asoma por encima del obstáculo.</p>
+    <h2>V y M</h2>
+    <p class="small"><b>V</b> es el ángulo respecto del norte verdadero (geográfico) y <b>M</b> respecto del norte magnético, el que marca una brújula de aguja. <span id="declination-note"></span> En el celular depende de la app: el iPhone con "Norte verdadero" activado marca V.</p>
+  </section>
+
+  <section class="map-section">
+    <div class="map-head">
+      <span class="muted small" id="map-hint">Tocá el mapa o arrastrá el punto a donde vas a estar.</span>
+      <button type="button" class="secondary" id="toggle-map" aria-expanded="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>
+        <span id="toggle-map-label">Ocultar mapa</span>
+      </button>
+    </div>
+    <div id="map-block"><div id="map"></div></div>
+  </section>
+
+  <section id="day-list"></section>
+
+  <footer>Efemérides calculadas en el dispositivo (astronomy-engine), validadas contra USNO y JPL Horizons. Campo magnético: WMM2025. Búsqueda: <a href="https://photon.komoot.io">Photon</a>. Mapas: Esri y © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</footer>
+</main>
+<!-- APP_SCRIPT -->
+</body>
+</html>
